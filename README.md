@@ -126,6 +126,21 @@ You can restart the crawler from the seed url
 You can specify a different config file to use by using the command with the option
 ```python3 launch.py --config_file path/to/config```
 
+### Crawl statistics
+
+The scraper follows links only on the four assignment domains, resolves
+relative links (including links with an HTML `<base>` element), removes URL
+fragments, and ignores common non-page file types. Successful HTML pages are
+recorded in the local `crawl_stats.sqlite3` database. To print the report
+statistics after a crawl, run:
+
+```python3 crawl_stats.py```
+
+The report includes the number of unique pages, the longest page by extracted
+text words, the 50 most common words after stop-word removal, and page counts
+for `ics.uci.edu` subdomains. Resuming a crawl keeps its existing statistics;
+starting with `--restart` clears them.
+
 ARCHITECTURE
 -------------------------
 

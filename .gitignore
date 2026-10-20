@@ -108,3 +108,6 @@ venv.bak/
 
 *.full.py
 *.shelve
+crawl_stats.sqlite3
+crawl_stats.sqlite3-shm
+crawl_stats.sqlite3-wal

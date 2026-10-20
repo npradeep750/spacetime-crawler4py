@@ -1,9 +1,15 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urldefrag, urljoin, urlparse
+
+from bs4 import BeautifulSoup
+
+LINK_TAGS = {"a", "area", "frame", "iframe"}
+
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
+
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -15,7 +21,34 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+
+    if getattr(resp, "status", None) != 200 or not getattr(resp, "raw_response", None):
+        return []
+
+    html = getattr(resp.raw_response, "text", "")
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    base_tag = soup.find("base", href=True)
+    page_url = getattr(resp, "url", None) or url
+    base_url = urljoin(page_url, base_tag["href"]) if base_tag else page_url
+
+    links = []
+    seen = set()
+
+    for tag in soup.find_all(LINK_TAGS):
+        attr = "src" if tag.name in {"frame", "iframe"} else "href"
+        href = tag.get(attr)
+        if href and href.strip():
+            absolute_url, _ = urldefrag(urljoin(base_url, href.strip()))
+            if absolute_url not in seen:
+                seen.add(absolute_url)
+                links.append(absolute_url)
+
+    return links
+
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
