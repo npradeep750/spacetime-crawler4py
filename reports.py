@@ -1,15 +1,16 @@
-from collections import Counter
+from collections import Counter, defaultdict
 
 class Report:
     def __init__(self):
         self._unique_pages = set()
         self._unique_page_count = 0
 
-        self._longest_page = 0
+        self._longest_page = None
+        self._longest_count = 0
 
         self._word_count = Counter()
 
-        self._ics_subdomains = Counter()
+        self._subdomains = defaultdict(int)
 
     def check_unique_page(self, url) -> None:
         """Checks if a page is unique and increments it to the count if so."""
@@ -23,8 +24,11 @@ class Report:
         """Returns the count of unique pages."""
         return self._unique_page_count
 
-    def check_longest_page(self):
-        pass
+    def check_longest_page(self, page, tokens):
+        page_len = len(tokens)
+        if page_len > self._longest_count:
+            self._longest_count = page_len
+            self._longest_page = page
 
     def get_longest(self):
         """Returns the page with the most words"""
@@ -38,12 +42,15 @@ class Report:
         """Returns the {amount} most common words throughout every page crawled. {amount} defaults to 50."""
         return self._word_count.most_common(amount)
 
-    def check_ics_subdomain(self, page):
-        # should be able to just use seen() set from scraper.py
-        """Takes in a page and increments it to a Counter if it's an ICS subdomain."""
-        if not page.hostname.endswith("ics.uci.edu"):
-            return
-        if page.hostname in self._ics_subdomains:
-            self._ics_subdomains[page.hostname] += 1
-        else:
-            self._ics_subdomains[page.hostname] = 1
+    # def check_ics_subdomain(self, page):
+    #     """Takes in a page and increments it to a Counter if it's an ICS subdomain."""
+    #     if not page.hostname.endswith("ics.uci.edu"):
+    #         return
+    #     if page.hostname in self._ics_subdomains:
+    #         self._ics_subdomains[page.hostname] += 1
+    #     else:
+    #         self._ics_subdomains[page.hostname] = 1
+    #     pass
+
+    def add_subdomain(self, subdomain):
+        self._subdomains[subdomain] += 1
