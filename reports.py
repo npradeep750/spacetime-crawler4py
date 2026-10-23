@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+from urllib.parse import urldefrag
 
 class Report:
     def __init__(self):
@@ -15,11 +16,11 @@ class Report:
 
     def check_unique_page(self, url) -> None:
         """Checks if a page is unique and increments it to the count if so."""
-        page = url._replace(fragment="").geturl()
+        page, _ = urldefrag(url)
 
         if page not in self._unique_pages:
             self._unique_pages.add(page)
-            self._count += 1
+            self._unique_page_count += 1
 
     def get_unique_page_count(self) -> int:
         """Returns the count of unique pages."""
