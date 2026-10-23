@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 
 class Report:
     def __init__(self):
@@ -9,7 +9,7 @@ class Report:
 
         self._word_count = Counter()
 
-        self._subdomains = 0
+        self._subdomains = defaultdict(int)
 
     def check_unique_page(self, url):
         """Checks if a page is unique and increments it to the count if so."""
@@ -41,3 +41,6 @@ class Report:
     def get_subdomains():
         # should be able to just use seen() set from scraper.py
         pass
+
+    def add_subdomain(self, subdomain):
+        self._subdomains[subdomain] += 1
