@@ -90,7 +90,7 @@ def tokenize_response(resp):
 def load_stopwords(path="stopwords.txt"):
     """Returns a set of all stopwords from the file given (defaulted to stopwords.txt)."""
     with open(path, 'r', encoding="utf-8") as file:
-        return {line.strip().loewr() for line in file if line.strip()}
+        return {line.strip().lower() for line in file if line.strip()}
 
 STOPWORDS = load_stopwords()
 
