@@ -76,7 +76,7 @@ def tokenize_response(resp):
     try:
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
         text = soup.get_text().lower()
-        token_words = re.finall(r'[a-zA-Z0-9]+', text)
+        token_words = re.findall(r'[a-zA-Z0-9]+', text)
     except (AttributeError, TypeError):
         return []
     return token_words
