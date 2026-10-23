@@ -37,7 +37,8 @@ def extract_next_links(url, resp):
 
     seen_links.add(url)
 
-    add_subdomain(url)
+    report.check_unique_page(url)
+    report.check_ics_subdomain()
 
     html = getattr(resp.raw_response, "text", "")
 
