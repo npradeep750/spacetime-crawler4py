@@ -10,7 +10,8 @@ class Report:
 
         self._word_count = Counter()
 
-        self._subdomains = defaultdict(int)
+        self._ics_subdomains = Counter()
+        # self._subdomains = defaultdict(int)
 
     def check_unique_page(self, url) -> None:
         """Checks if a page is unique and increments it to the count if so."""
@@ -42,15 +43,14 @@ class Report:
         """Returns the {amount} most common words throughout every page crawled. {amount} defaults to 50."""
         return self._word_count.most_common(amount)
 
-    # def check_ics_subdomain(self, page):
-    #     """Takes in a page and increments it to a Counter if it's an ICS subdomain."""
-    #     if not page.hostname.endswith("ics.uci.edu"):
-    #         return
-    #     if page.hostname in self._ics_subdomains:
-    #         self._ics_subdomains[page.hostname] += 1
-    #     else:
-    #         self._ics_subdomains[page.hostname] = 1
-    #     pass
+    def check_ics_subdomain(self, page):
+        """Takes in a page and increments it to a Counter if it's an ICS subdomain."""
+        hostname = page.hostname
+        if not hostname:
+            return
+        hostname = hostname.rstrip(".")
+        if hostname.endswith(".ics.uci.edu") or hostname == "ics.uci.edu":
+            self._ics_subdomains[hostname] += 1
 
-    def add_subdomain(self, subdomain):
-        self._subdomains[subdomain] += 1
+    # def add_subdomain(self, subdomain):
+    #     self._subdomains[subdomain] += 1

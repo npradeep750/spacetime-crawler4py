@@ -116,18 +116,18 @@ def create_simhash(resp):
     
     return "".join("1" if bit_sum >= 0 else "0" for bit_sum in v)
 
-def add_subdomain(url):
-    if "ics.uci.edu" not in url:
-        return
-    pattern = 'https?://([^/]+)\.ics\.uci\.edu'
-    match = re.search(pattern, url)
-    if not match:
-        return
-    subdomain_str = match.group(1).lower()
-    if subdomain_str in ('www', ''):
-        return
-    subdomain = 'https://' + subdomain_str + '.ics.uci.edu'
-    report.add_subdomain(subdomain)
+# def add_subdomain(url):
+#     if "ics.uci.edu" not in url:
+#         return
+#     pattern = 'https?://([^/]+)\.ics\.uci\.edu'
+#     match = re.search(pattern, url)
+#     if not match:
+#         return
+#     subdomain_str = match.group(1).lower()
+#     if subdomain_str in ('www', ''):
+#         return
+#     subdomain = 'https://' + subdomain_str + '.ics.uci.edu'
+#     report.add_subdomain(subdomain)
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
