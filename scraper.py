@@ -40,6 +40,12 @@ def extract_next_links(url, resp):
     report.check_unique_page(url)
     report.check_ics_subdomain(urlparse(url))
 
+    tokens = tokenize_response(resp)
+    filtered_tokens = remove_stopwords(tokens)
+    
+    report.check_longest_page(url, filtered_tokens)
+    report.update_words(filtered_tokens)
+
     html = getattr(resp.raw_response, "text", "")
 
     simhash = create_simhash(resp)
