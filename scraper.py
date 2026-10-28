@@ -1,6 +1,6 @@
 import re
 import hashlib
-from urllib.parse import urldefrag, urljoin, urlparse
+from urllib.parse import urldefrag, urljoin, urlparse, parse_qsl
 from collections import Counter
 from reports import Report
 
@@ -21,16 +21,27 @@ TRAP_QUERY_KEYS = {
 }
 TRAP_PATH = re.compile(r"/(timeline|changeset|wp-json|feed|calendar|day|week|month)(/|$)", re.I)
 DATE = re.compile(r"\d{4}-\d{2}(-\d{2})?")
+PATTERN_LIMIT = 10
 
 seen_links = set()
 bad_links = set()
 simhashes = []
+pattern_hits = Counter()
+blocked_patterns = set()
+pages_processed = 0
 
 report = Report()
 
 
 def scraper(url, resp):
+    global pages_processed
     links = extract_next_links(url, resp)
+
+    pages_processed += 1
+    if pages_processed % 100 == 0:
+        report.save()
+        report.generate_report_file()
+
     return [link for link in links if is_valid(link)]
 
 
@@ -44,10 +55,6 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-
-    # if getattr(resp, "status", None) != 200 or not getattr(resp, "raw_response", None) or url in bad_links or url in seen_links:
-    #     bad_links.add(url)
-    #     return set()
 
     # Queues an unfollowed redirect to run the scrapper on
     raw = getattr(resp, "raw_response", None)
@@ -87,36 +94,27 @@ def extract_next_links(url, resp):
     report.check_ics_subdomain(urlparse(final_url))
 
     tokens = tokenize_response(resp)
-    filtered_tokens = remove_stopwords(tokens)
-    
-    report.check_longest_page(final_url, filtered_tokens)
-    report.update_words(filtered_tokens)
 
-    html = getattr(resp.raw_response, "text", "")
-
-    simhash = create_simhash(resp)
-
-    if simhash in simhashes:
-        bad_links.add(final_url)
-        return set()
+    if len(tokens) < MIN_NUM_OF_WORDS:
+        record_bad_page(final_url) # still follow links but because the page is low info we ignore its contents
     else:
-        try:
-            sim = max(similarity(simhash, s) for s in simhashes)
-            if sim >= 0.95:
-                simhashes.append(simhash)
-                bad_links.add(final_url)
-                return set()
-        except ValueError:
-            simhashes.append(simhash)
-    
-    if simhash not in simhashes:
-        simhashes.append(simhash)
+        if is_near_duplicate(create_simhash(tokens)):
+            bad_links.add(final_url)
+            record_bad_page(final_url)
+            return []
+        report.check_longest_page(final_url, tokens)
+        report.update_words(remove_stopwords(tokens))
+
+    html = getattr(raw, "text", "")
 
     soup = BeautifulSoup(html, "html.parser")
 
     base_tag = soup.find("base", href=True)
-    page_url = getattr(resp, "url", None) or final_url
-    base_url = urljoin(page_url, base_tag["href"]) if base_tag else page_url
+    page_url = final_url
+    try:
+        base_url = urljoin(page_url, base_tag["href"]) if base_tag else page_url
+    except ValueError:
+        base_url = page_url
 
     links = set()
 
@@ -124,7 +122,10 @@ def extract_next_links(url, resp):
         attr = "src" if tag.name in {"frame", "iframe"} else "href"
         href = tag.get(attr).split('#')[0] if tag.get(attr) else None
         if href and href.strip():
-            absolute_url, _ = urldefrag(urljoin(base_url, href.strip()))
+            try:
+                absolute_url, _ = urldefrag(urljoin(base_url, href.strip()))
+            except ValueError:
+                continue
             if is_valid(absolute_url):
                 links.add(absolute_url)
 
@@ -135,7 +136,7 @@ def tokenize_response(resp):
         soup = BeautifulSoup(resp.raw_response.content, "html.parser")
         for tag in soup(["script", "style", "noscript"]):
             tag.decompose()
-        text = soup.get_text(separator=" ").lower()
+        text = soup.get_text(separator=" ").lower().replace("\u2019", "'")
     except (AttributeError, TypeError):
         return []
     return re.findall(r"[a-z0-9]+(?:'[a-z]+)?", text)
@@ -150,40 +151,49 @@ STOPWORDS = load_stopwords()
 def remove_stopwords(tokens):
     return [token for token in tokens if token not in STOPWORDS]
 
-def similarity(hash1, hash2):
-    return sum(h1 == h2 for h1, h2 in zip(hash1, hash2)) / 160
-
-def create_simhash(resp):
-
-    tokens = tokenize_response(resp)
-    freq = Counter(tokens)
-
-    # report.check_longest_page(resp, tokens)
-    # report.update_words(freq)
-
+def create_simhash(tokens):
     v = [0] * 160
+    for token, weight in Counter(tokens).items():
+        h = int.from_bytes(hashlib.sha1(token.encode("utf-8")).digest(), "big")
+        for i in range(160):
+            v[i] += weight if (h >> i) & 1 else -weight
+    return sum(1 << i for i, total in enumerate(v) if total >= 0)
 
-    for token, weight in freq.items():
-        hash_hex = hashlib.sha1(token.encode('utf-8')).hexdigest()
-        binary_str = f"{int(hash_hex, 16):0160b}"
+def similarity(hash1, hash2):
+    return 1 - bin(hash1 ^ hash2).count("1") / 160
 
-        for i, bit in enumerate(binary_str):
-            v[i] += weight if bit == '1' else -weight
-    
-    return "".join("1" if bit_sum >= 0 else "0" for bit_sum in v)
+def is_near_duplicate(simhash, threshold=0.95):
+    """Returns if a page matches one stored. If not, it remembers it."""
+    for s in simhashes:
+        if similarity(simhash, s) >= threshold:
+            return True
+    simhashes.append(simhash)
+    return False
 
-# def add_subdomain(url):
-#     if "ics.uci.edu" not in url:
-#         return
-#     pattern = 'https?://([^/]+)\.ics\.uci\.edu'
-#     match = re.search(pattern, url)
-#     if not match:
-#         return
-#     subdomain_str = match.group(1).lower()
-#     if subdomain_str in ('www', ''):
-#         return
-#     subdomain = 'https://' + subdomain_str + '.ics.uci.edu'
-#     report.add_subdomain(subdomain)
+def is_trap(parsed):
+    path, query = parsed.path.lower(), parsed.query.lower()
+    segments = [seg for seg in path.split("/") if seg]
+    if segments and max(Counter(segments).values()) > 2:
+        return True
+    if any(k.lower() in TRAP_QUERY_KEYS for k, _ in parse_qsl(query, keep_blank_values=True)):
+        return True
+    if TRAP_PATH.search(path):
+        return True
+    if DATE.search(query) or ("/event" in path and DATE.search(path)):
+        return True
+    return False
+
+def url_pattern(parsed):
+    path = re.sub(r"\d+", "N", parsed.path.lower())
+    keys = sorted(key.lower() for key, _ in parse_qsl(parsed.query, keep_blank_values=True))
+    return (parsed.hostname or "").lower() + path + "?" + "&".join(keys)
+
+def record_bad_page(url):
+    """Gets called on near-duplicate or low-info pages. Blocks a URL template after it gets PATTERN_LIMIT amount of them."""
+    pattern = url_pattern(urlparse(url))
+    pattern_hits[pattern] += 1
+    if pattern_hits[pattern] >= PATTERN_LIMIT:
+        blocked_patterns.add(pattern)
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -200,6 +210,10 @@ def is_valid(url):
             return False
         if not any(hostname == domain or hostname.endswith("." + domain) for domain in ALLOWED_DOMAINS):
             return False
+        if not url.isascii() or len(url) > MAX_URL_LENGTH:
+            return False
+        if is_trap(parsed) or url_pattern(parsed) in blocked_patterns:
+            return False
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
@@ -213,3 +227,5 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
+    except ValueError:
+        return False

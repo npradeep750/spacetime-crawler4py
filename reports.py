@@ -1,6 +1,9 @@
 from collections import Counter, defaultdict
 from urllib.parse import urldefrag
 
+import os
+import pickle
+
 class Report:
     def __init__(self):
         self._unique_pages = set()
@@ -91,3 +94,18 @@ class Report:
                 f.write("  N/A\n")
 
             f.write("\n" + "=" * 50 + "\n")
+
+    def save(self, filename="report_state.pkl"):
+        """Saves current stats to disk so a crash or kill doesn't lose everything."""
+        tmp = filename + ".tmp"
+        with open(tmp, "wb") as file:
+            pickle.dump(self.__dict__, file)
+        os.replace(tmp, filename)
+
+    def load(self, filename="report_state.pkl"):
+        """Restored stats from a saved run."""
+        try:
+            with open(filename, "rb") as file:
+                self.__dict__.update(pickle.load(file))
+        except FileNotFoundError:
+            pass
