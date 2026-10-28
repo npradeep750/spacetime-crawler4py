@@ -76,7 +76,7 @@ class Report:
             f.write(f"ICS Subdomains (sorted alphabetically): {len(self._ics_subdomains)}\n")
             if self._ics_subdomains:
                 for subdomain, count in sorted(self._ics_subdomains.items()):
-                    f.write(f"  {subdomain}: {count}\n")
+                    f.write(f"  http://{subdomain}, {count}\n")
             else:
                 f.write("  N/A\n")
             f.write("\n")

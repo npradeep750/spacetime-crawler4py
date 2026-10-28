@@ -7,6 +7,20 @@ from reports import Report
 from bs4 import BeautifulSoup
 
 LINK_TAGS = {"a", "area", "frame", "iframe"}
+ALLOWED_DOMAINS = ("ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu")
+REDIRECT_CODES = {301, 302, 303, 307, 308}
+MAX_PAGE_BYTE_SIZE = 5 * 1024 * 1024
+MIN_NUM_OF_WORDS = 50
+MAX_URL_LENGTH = 200
+TRAP_QUERY_KEYS = {
+    "do", "rev", "rev2[0]", "rev2[1]", "idx", "image", "tab_files", "tab_details",  # DokuWiki
+    "action", "version", "format",                                                  # Trac / MoinMoin
+    "ical", "outlook-ical", "tribe-bar-date", "eventdisplay",                       # event calendars
+    "share", "replytocom",                                                          # WordPress
+    "c", "o",                                                                       # Apache dir-listing sorts
+}
+TRAP_PATH = re.compile(r"/(timeline|changeset|wp-json|feed|calendar|day|week|month)(/|$)", re.I)
+DATE = re.compile(r"\d{4}-\d{2}(-\d{2})?")
 
 seen_links = set()
 bad_links = set()
@@ -31,19 +45,51 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
-    if getattr(resp, "status", None) != 200 or not getattr(resp, "raw_response", None) or url in bad_links or url in seen_links:
+    # if getattr(resp, "status", None) != 200 or not getattr(resp, "raw_response", None) or url in bad_links or url in seen_links:
+    #     bad_links.add(url)
+    #     return set()
+
+    # Queues an unfollowed redirect to run the scrapper on
+    raw = getattr(resp, "raw_response", None)
+    if getattr(resp, "status", None) in REDIRECT_CODES and raw is not None:
         bad_links.add(url)
-        return set()
+        location = raw.headers.get("Location")
+        if location:
+            try:
+                target, _ = urldefrag(urljoin(url, location.strip()))
+                return [target]
+            except ValueError:
+                pass
+        return []
 
-    seen_links.add(url)
+    if getattr(resp, "status", None) != 200 or not raw or url in bad_links or url in seen_links:
+        bad_links.add(url)
+        return []
 
-    report.check_unique_page(url)
-    report.check_ics_subdomain(urlparse(url))
+    # Follows a redirect, final_url is the page we followed
+    final_url = url
+    if getattr(raw, "history", None) and getattr(raw, "url", None):
+        final_url, _ = urldefrag(raw.url)
+        if final_url != url:
+            seen_links.add(url)
+            if not is_valid(final_url):
+                return[]
+
+    seen_links.add(final_url)
+
+    content = raw.content or b"" # b"" means an empty string in bytes
+    content_type = raw.headers.get("Content-Type", "").lower()
+    if (content_type and "html" not in content_type) or not content or len(content) > MAX_PAGE_BYTE_SIZE:
+        bad_links.add(final_url)
+        return []
+
+    report.check_unique_page(final_url)
+    report.check_ics_subdomain(urlparse(final_url))
 
     tokens = tokenize_response(resp)
     filtered_tokens = remove_stopwords(tokens)
     
-    report.check_longest_page(url, filtered_tokens)
+    report.check_longest_page(final_url, filtered_tokens)
     report.update_words(filtered_tokens)
 
     html = getattr(resp.raw_response, "text", "")
@@ -51,14 +97,14 @@ def extract_next_links(url, resp):
     simhash = create_simhash(resp)
 
     if simhash in simhashes:
-        bad_links.add(url)
+        bad_links.add(final_url)
         return set()
     else:
         try:
             sim = max(similarity(simhash, s) for s in simhashes)
             if sim >= 0.95:
                 simhashes.append(simhash)
-                bad_links.add(url)
+                bad_links.add(final_url)
                 return set()
         except ValueError:
             simhashes.append(simhash)
@@ -69,7 +115,7 @@ def extract_next_links(url, resp):
     soup = BeautifulSoup(html, "html.parser")
 
     base_tag = soup.find("base", href=True)
-    page_url = getattr(resp, "url", None) or url
+    page_url = getattr(resp, "url", None) or final_url
     base_url = urljoin(page_url, base_tag["href"]) if base_tag else page_url
 
     links = set()
@@ -149,12 +195,10 @@ def is_valid(url):
 
     try:
         parsed = urlparse(url)
+        hostname = (parsed.hostname or "").lower()
         if parsed.scheme not in set(["http", "https"]):
             return False
-        if not (".ics.uci.edu" in parsed.netloc or 
-                ".cs.uci.edu" in parsed.netloc or 
-                ".informatics.uci.edu" in parsed.netloc or 
-                "stat.uci.edu" in parsed.netloc):
+        if not any(hostname == domain or hostname.endswith("." + domain) for domain in ALLOWED_DOMAINS):
             return False
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
