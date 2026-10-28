@@ -53,5 +53,41 @@ class Report:
         if hostname.endswith(".ics.uci.edu") or hostname == "ics.uci.edu":
             self._ics_subdomains[hostname] += 1
 
-    # def add_subdomain(self, subdomain):
-    #     self._subdomains[subdomain] += 1
+    def generate_report_file(self, filename: str = "crawl_report.txt") -> None:
+        """Writes all collected statistics into a formatted text file."""
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("=" * 50 + "\n")
+            f.write("          WEB CRAWLER STATISTICS REPORT          \n")
+            f.write("=" * 50 + "\n\n")
+
+            # 1. Unique Pages Count
+            f.write(f"Total Unique Pages: {self.get_unique_page_count()}\n\n")
+
+            # 2. Longest Page
+            f.write("Longest Page (by word count):\n")
+            if self._longest_page:
+                f.write(f"  URL: {self._longest_page}\n")
+                f.write(f"  Word Count: {self._longest_count}\n")
+            else:
+                f.write("  N/A\n")
+            f.write("\n")
+
+            # 3. ICS Subdomains
+            f.write(f"ICS Subdomains (sorted alphabetically): {len(self._ics_subdomains)}\n")
+            if self._ics_subdomains:
+                for subdomain, count in sorted(self._ics_subdomains.items()):
+                    f.write(f"  {subdomain}: {count}\n")
+            else:
+                f.write("  N/A\n")
+            f.write("\n")
+
+            # 4. Most Common Words
+            f.write("Most Common Words (Top 50):\n")
+            common_words = self.get_most_common_words(50)
+            if common_words:
+                for word, freq in common_words:
+                    f.write(f"  {word}: {freq}\n")
+            else:
+                f.write("  N/A\n")
+
+            f.write("\n" + "=" * 50 + "\n")
