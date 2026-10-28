@@ -106,6 +106,9 @@ def create_simhash(resp):
     tokens = tokenize_response(resp)
     freq = Counter(tokens)
 
+    # report.check_longest_page(resp, tokens)
+    # report.update_words(freq)
+
     v = [0] * 160
 
     for token, weight in freq.items():
