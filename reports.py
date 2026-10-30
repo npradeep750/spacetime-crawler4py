@@ -43,9 +43,15 @@ class Report:
         """Takes the tokens from a page and updates the frequency list of words."""
         self._word_count.update(tokens)
 
+    @staticmethod
+    def is_word(token):
+        """Returns true for any sequence of 2+ characters with at least one letter."""
+        return len(token) >= 2 and any(letter.isalpha() for letter in token)
+
     def get_most_common_words(self, amount: int = 50) -> list[tuple[str, int]]:
         """Returns the {amount} most common words throughout every page crawled. {amount} defaults to 50."""
-        return self._word_count.most_common(amount)
+        words = [(word, count) for word, count in self._word_count.most_common() if self.is_word(word)]
+        return words[:amount]
 
     def check_ics_subdomain(self, page):
         """Takes in a page and increments it to a Counter if it's an ICS subdomain."""
